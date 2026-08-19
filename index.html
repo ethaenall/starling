@@ -9,12 +9,6 @@
       content="Every website you care about becomes a celestial object in your own little universe."
     />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap"
-      rel="stylesheet"
-    />
   </head>
   <body data-sky="night">
     <canvas id="sky" aria-hidden="true"></canvas>
@@ -162,6 +156,10 @@
       <div class="panel glass" role="dialog" aria-labelledby="settings-title">
         <h2 id="settings-title">Observatory</h2>
         <p class="lede">Everything stays in this browser. No account. No telemetry.</p>
+        <p class="lede ext-only" id="ext-lede" hidden>
+          This sky is your New Tab. To use it as your homepage too, set Chrome’s home button to
+          <code>chrome://newtab</code>.
+        </p>
         <label>
           Search engine
           <select id="set-engine"></select>

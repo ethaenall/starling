@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "STARLING — your internet as a living solar system",
+  "description": "STARLING — New Tab. Your internet as a living solar system.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

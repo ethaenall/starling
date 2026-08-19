@@ -264,7 +264,7 @@ export function createEngine(canvas, visuals, hooks) {
       ctx.closePath();
       ctx.stroke();
       ctx.fillStyle = "rgba(230, 226, 214, 0.7)";
-      ctx.font = "500 11px Outfit, sans-serif";
+      ctx.font = "500 11px \"Avenir Next\", \"Segoe UI\", sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(sys.constellation.name.toUpperCase(), sys.x, sys.y - 36);
     }
@@ -332,7 +332,7 @@ export function createEngine(canvas, visuals, hooks) {
     }
 
     if (getState().settings.showLabels || p.world.id === hoverId || mergeTarget) {
-      ctx.font = "500 12px Outfit, sans-serif";
+      ctx.font = "500 12px \"Avenir Next\", \"Segoe UI\", sans-serif";
       ctx.textAlign = "center";
       ctx.fillStyle = p.world.id === hoverId || mergeTarget ? "rgba(244,241,234,0.95)" : "rgba(244,241,234,0.62)";
       ctx.fillText(`${p.world.icon}  ${p.world.name}`, 0, p.r + 18);
@@ -365,7 +365,7 @@ export function createEngine(canvas, visuals, hooks) {
     const p = drag.placed;
     if (ghost.merge) {
       ctx.save();
-      ctx.font = "500 12px Outfit, sans-serif";
+      ctx.font = "500 12px \"Avenir Next\", \"Segoe UI\", sans-serif";
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(255,214,160,0.9)";
       ctx.fillText("Join system", ghost.x, ghost.y - p.r - 18);

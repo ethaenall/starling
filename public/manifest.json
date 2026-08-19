@@ -2,14 +2,28 @@
   "manifest_version": 3,
   "name": "STARLING",
   "short_name": "STARLING",
-  "description": "Your internet as a living solar system. Every site you care about becomes a planet.",
-  "version": "1.0.0",
+  "description": "Your internet as a living solar system — a New Tab of orbiting worlds. Local only.",
+  "version": "1.1.0",
   "chrome_url_overrides": {
     "newtab": "index.html"
+  },
+  "action": {
+    "default_title": "STARLING — New Tab",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "host_permissions": [
+    "https://api.nasa.gov/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' https: data:; connect-src 'self' https://api.nasa.gov"
   }
 }

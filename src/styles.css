@@ -9,8 +9,8 @@
   --glass-border: rgba(255, 255, 255, 0.12);
   --accent: #c9b896;
   --danger: #e07a6a;
-  --font-serif: "Cormorant Garamond", "Times New Roman", serif;
-  --font-sans: "Outfit", "Segoe UI", sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-sans: "Avenir Next", "Segoe UI", system-ui, sans-serif;
   color-scheme: dark;
 }
 
@@ -411,6 +411,13 @@ kbd {
   color: var(--muted);
   font-size: 0.92rem;
   line-height: 1.5;
+}
+
+.ext-only code {
+  font-family: var(--font-sans);
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+  color: var(--accent);
 }
 
 label,

@@ -13,6 +13,7 @@ import {
 import { ENGINES, stageOf } from "./defaults.js";
 import { prettyHost, nameFromUrl } from "./math.js";
 import { downloadJson } from "./storage.js";
+import { go, isExtension } from "./platform.js";
 import { loadApod, renderApod } from "./apod.js";
 import { drawMiniPlanet } from "./planet-gen.js";
 
@@ -144,7 +145,7 @@ export function bindUI(app) {
       engine()?.burst(world.id);
       toast(`${world.name} is evolving — ${evolved.label}`);
     }
-    window.open(world.url, "_blank", "noopener");
+    go(world.url);
   }
 
   function renderSuggest(items) {
@@ -193,12 +194,12 @@ export function bindUI(app) {
     }
     if (/^[^\s]+\.[^\s]+$/.test(q) || /^https?:\/\//i.test(q)) {
       const href = /^https?:\/\//i.test(q) ? q : `https://${q}`;
-      window.open(href, "_blank", "noopener");
+      go(href);
       search.value = "";
       return;
     }
     const engine = ENGINES[getState().settings.engine] || ENGINES.google;
-    window.open(engine.href(q), "_blank", "noopener");
+    go(engine.href(q));
     search.value = "";
   });
 
@@ -419,6 +420,11 @@ export function bindUI(app) {
 
   fillEngines();
   syncEmpty();
+  if (isExtension()) {
+    const note = $("ext-lede");
+    if (note) note.hidden = false;
+    document.body.dataset.ext = "1";
+  }
 
   return {
     toast,
