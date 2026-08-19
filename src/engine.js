@@ -1,9 +1,18 @@
-import { clamp, lerp, TAU, development } from "./math.js";
-import { getState, advancePhases, grouped, worldsIn, constellationById } from "./universe.js";
+import { clamp, lerp, lerpAngle, TAU, development } from "./math.js";
+import {
+  getState,
+  advancePhases,
+  grouped,
+  worldsIn,
+  constellationById,
+  snapOrbit,
+  ORBIT_LANES,
+} from "./universe.js";
 import { drawPlanetBody } from "./planet-gen.js";
 import { createStarfield, drawSky, drawSun, skyPalette, skyPeriod } from "./sky.js";
 
 const TILT = 0.4;
+const MERGE_PAD = 36;
 
 export function createEngine(canvas, visuals, hooks) {
   const ctx = canvas.getContext("2d");
@@ -11,12 +20,15 @@ export function createEngine(canvas, visuals, hooks) {
   const mouse = { x: innerWidth / 2, y: innerHeight / 2, down: false };
   const parallax = { x: 0, y: 0 };
   const particles = [];
+  const shownSys = new Map();
   let hoverId = null;
   let drag = null;
   let last = performance.now();
   let shooting = null;
   let running = true;
   let searchPulse = 0;
+  let frameDt = 0.016;
+  let placeCache = null;
 
   function resize() {
     const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -42,44 +54,74 @@ export function createEngine(canvas, visuals, hooks) {
     return lerp(L.inner, L.outer, clamp(orbit, 0, 1));
   }
 
-  function placeWorlds() {
+  function computePlacement(dt) {
     const L = layout();
     const { worlds } = getState();
     const placed = [];
     const systemCenters = new Map();
+    const lerpK = dt > 0 ? 1 - Math.exp(-dt * 7) : 1;
+    const angK = dt > 0 ? 1 - Math.exp(-dt * 8) : 1;
 
     for (const world of worlds) {
       const vis = visuals.get(world.id);
       if (!vis) continue;
+      if (dt > 0) {
+        vis.shownOrbit = lerp(vis.shownOrbit ?? world.orbit, world.orbit, lerpK);
+        vis.shownPhase = lerpAngle(vis.shownPhase ?? world.phase, world.phase, angK);
+        vis.shownLocal = lerpAngle(vis.shownLocal ?? world.localPhase, world.localPhase, angK);
+      } else {
+        vis.shownOrbit ??= world.orbit;
+        vis.shownPhase ??= world.phase;
+        vis.shownLocal ??= world.localPhase;
+      }
+
       let x;
       let y;
       let depth;
       const members = world.constellationId ? worldsIn(world.constellationId) : [];
-      const inSystem = world.constellationId && members.length >= 2;
+      const c = world.constellationId ? constellationById(world.constellationId) : null;
+      const inSystem = Boolean(c && members.length >= 2);
 
       if (inSystem) {
-        const c = constellationById(world.constellationId);
         if (!systemCenters.has(c.id)) {
-          const R = radiusOf(c.orbit, L);
+          let shown = shownSys.get(c.id);
+          if (!shown) {
+            shown = { orbit: c.orbit, phase: c.phase };
+            shownSys.set(c.id, shown);
+          }
+          if (dt > 0) {
+            shown.orbit = lerp(shown.orbit, c.orbit, lerpK);
+            shown.phase = lerpAngle(shown.phase, c.phase, angK);
+          }
+          const R = radiusOf(shown.orbit, L);
           systemCenters.set(c.id, {
             constellation: c,
-            x: L.cx + Math.cos(c.phase) * R,
-            y: L.cy + Math.sin(c.phase) * R * TILT,
-            depth: Math.sin(c.phase),
+            x: L.cx + Math.cos(shown.phase) * R,
+            y: L.cy + Math.sin(shown.phase) * R * TILT,
+            depth: Math.sin(shown.phase),
             R,
           });
         }
         const sys = systemCenters.get(c.id);
         const idx = members.findIndex((m) => m.id === world.id);
-        const localR = 28 + idx * 16;
-        x = sys.x + Math.cos(world.localPhase) * localR;
-        y = sys.y + Math.sin(world.localPhase) * localR * TILT;
-        depth = sys.depth + Math.sin(world.localPhase) * 0.15;
+        let localR = 52 + idx * 28;
+        const arriving = world.arriving ?? 0;
+        if (arriving > 0) localR = lerp(92, localR, 1 - arriving * arriving);
+        x = sys.x + Math.cos(vis.shownLocal) * localR;
+        y = sys.y + Math.sin(vis.shownLocal) * localR * TILT;
+        depth = sys.depth + Math.sin(vis.shownLocal) * 0.15;
       } else {
-        const R = radiusOf(world.orbit, L);
-        x = L.cx + Math.cos(world.phase) * R;
-        y = L.cy + Math.sin(world.phase) * R * TILT;
-        depth = Math.sin(world.phase);
+        let R = radiusOf(vis.shownOrbit, L);
+        let phase = vis.shownPhase;
+        const arriving = world.arriving ?? 0;
+        if (arriving > 0) {
+          const ease = 1 - arriving * arriving;
+          R = lerp(L.outer * 1.42, R, ease);
+          phase += arriving * 1.85;
+        }
+        x = L.cx + Math.cos(phase) * R;
+        y = L.cy + Math.sin(phase) * R * TILT;
+        depth = Math.sin(phase);
       }
 
       const sizeMul = lerp(0.82, 1.18, 0.5 + depth * 0.5);
@@ -94,15 +136,36 @@ export function createEngine(canvas, visuals, hooks) {
     return { L, placed, systemCenters };
   }
 
-  function hitTest(px, py) {
+  function placeWorlds() {
+    if (placeCache) return placeCache;
+    return computePlacement(0);
+  }
+
+  function hitTest(px, py, excludeId = null) {
     const { placed } = placeWorlds();
     for (let i = placed.length - 1; i >= 0; i--) {
       const p = placed[i];
+      if (p.world.id === excludeId) continue;
       const dx = px - p.x;
       const dy = py - p.y;
       if (dx * dx + dy * dy <= (p.r + 10) * (p.r + 10)) return p;
     }
     return null;
+  }
+
+  function nearestMerge(px, py, excludeId) {
+    const { placed } = placeWorlds();
+    let best = null;
+    let bestD = Infinity;
+    for (const p of placed) {
+      if (p.world.id === excludeId) continue;
+      const d = Math.hypot(px - p.x, py - p.y);
+      if (d < p.r + MERGE_PAD && d < bestD) {
+        best = p;
+        bestD = d;
+      }
+    }
+    return best;
   }
 
   function spawnBurst(x, y, color) {
@@ -120,30 +183,60 @@ export function createEngine(canvas, visuals, hooks) {
     }
   }
 
-  function drawOrbits(L, hoverWorld) {
-    const { settings, worlds, constellations } = getState();
-    if (!settings.showOrbits) return;
-    ctx.save();
-    for (const world of worlds) {
-      const members = world.constellationId ? worldsIn(world.constellationId) : [];
-      if (world.constellationId && members.length >= 2) continue;
-      const R = radiusOf(world.orbit, L);
-      ctx.beginPath();
-      ctx.ellipse(L.cx, L.cy, R, R * TILT, 0, 0, TAU);
-      ctx.strokeStyle =
-        hoverWorld?.id === world.id ? "rgba(255,214,160,0.32)" : "rgba(255,255,255,0.06)";
-      ctx.lineWidth = hoverWorld?.id === world.id ? 1.4 : 1;
-      ctx.stroke();
+  function tickArrivals(placed, dt, reduced) {
+    for (const p of placed) {
+      const w = p.world;
+      if (w.arriving == null) continue;
+      if (w.arriving > 0) {
+        w.arriving = reduced ? 0 : Math.max(0, w.arriving - dt * 0.85);
+      }
+      if (w.arriving === 0 && w.arrivedBurst === false) {
+        w.arrivedBurst = true;
+        spawnBurst(p.x, p.y, "rgba(255,220,160,1)");
+      }
     }
-    for (const c of constellations) {
-      if (!grouped(c.id)) continue;
-      const R = radiusOf(c.orbit, L);
-      ctx.beginPath();
-      ctx.ellipse(L.cx, L.cy, R, R * TILT, 0, 0, TAU);
-      ctx.setLineDash([4, 8]);
-      ctx.strokeStyle = "rgba(180, 190, 255, 0.14)";
-      ctx.stroke();
-      ctx.setLineDash([]);
+  }
+
+  function drawOrbits(L, hoverWorld, dragGhost) {
+    const { settings, worlds, constellations } = getState();
+    if (!settings.showOrbits && !drag) return;
+    ctx.save();
+    if (drag) {
+      const snapLane = dragGhost?.lane;
+      for (let i = 0; i < ORBIT_LANES; i++) {
+        const orbit = i / (ORBIT_LANES - 1);
+        const R = radiusOf(orbit, L);
+        ctx.beginPath();
+        ctx.ellipse(L.cx, L.cy, R, R * TILT, 0, 0, TAU);
+        const active = snapLane != null && Math.abs(snapLane - orbit) < 0.001;
+        ctx.strokeStyle = active ? "rgba(255,214,160,0.55)" : "rgba(255,214,160,0.16)";
+        ctx.lineWidth = active ? 2 : 1;
+        ctx.stroke();
+      }
+    } else if (settings.showOrbits) {
+      for (const world of worlds) {
+        const members = world.constellationId ? worldsIn(world.constellationId) : [];
+        if (world.constellationId && members.length >= 2) continue;
+        const vis = visuals.get(world.id);
+        const R = radiusOf(vis?.shownOrbit ?? world.orbit, L);
+        ctx.beginPath();
+        ctx.ellipse(L.cx, L.cy, R, R * TILT, 0, 0, TAU);
+        ctx.strokeStyle =
+          hoverWorld?.id === world.id ? "rgba(255,214,160,0.32)" : "rgba(255,255,255,0.06)";
+        ctx.lineWidth = hoverWorld?.id === world.id ? 1.4 : 1;
+        ctx.stroke();
+      }
+      for (const c of constellations) {
+        if (!grouped(c.id)) continue;
+        const shown = shownSys.get(c.id);
+        const R = radiusOf(shown?.orbit ?? c.orbit, L);
+        ctx.beginPath();
+        ctx.ellipse(L.cx, L.cy, R, R * TILT, 0, 0, TAU);
+        ctx.setLineDash([4, 8]);
+        ctx.strokeStyle = "rgba(180, 190, 255, 0.14)";
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
     ctx.restore();
   }
@@ -152,8 +245,8 @@ export function createEngine(canvas, visuals, hooks) {
     for (const sys of systemCenters.values()) {
       const members = placed.filter((p) => p.world.constellationId === sys.constellation.id);
       if (members.length < 2) continue;
-      ctx.strokeStyle = "rgba(200, 210, 255, 0.16)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(200, 210, 255, 0.22)";
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
       members.forEach((p, i) => {
         if (i === 0) ctx.moveTo(p.x, p.y);
@@ -161,26 +254,35 @@ export function createEngine(canvas, visuals, hooks) {
       });
       ctx.closePath();
       ctx.stroke();
-      ctx.fillStyle = "rgba(230, 226, 214, 0.55)";
+      ctx.fillStyle = "rgba(230, 226, 214, 0.7)";
       ctx.font = "500 11px Outfit, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(sys.constellation.name.toUpperCase(), sys.x, sys.y - 36);
     }
   }
 
-  function drawWorld(p, L, dt, reduced) {
+  function drawWorld(p, L, dt, reduced, { hovered = false, mergeTarget = false } = {}) {
     const vis = p.vis;
     if (!reduced) vis.spin += vis.spinSpeed * dt;
 
     ctx.save();
     ctx.translate(p.x, p.y);
-    const glow = ctx.createRadialGradient(0, 0, p.r * 0.2, 0, 0, p.r * 2.4);
+    const glowR = p.r * (vis.glowRadius || 2.4) * (hovered ? 1.18 : 1);
+    const glow = ctx.createRadialGradient(0, 0, p.r * 0.2, 0, 0, glowR);
     glow.addColorStop(0, vis.glowColor);
     glow.addColorStop(1, "transparent");
     ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(0, 0, p.r * 2.4, 0, TAU);
+    ctx.arc(0, 0, glowR, 0, TAU);
     ctx.fill();
+
+    if (mergeTarget) {
+      ctx.strokeStyle = "rgba(255,214,160,0.85)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, p.r + 10, 0, TAU);
+      ctx.stroke();
+    }
 
     const lightAng = Math.atan2(L.cy - p.y, L.cx - p.x);
     drawPlanetBody(ctx, vis, p.r, vis.spin);
@@ -208,28 +310,49 @@ export function createEngine(canvas, visuals, hooks) {
       ctx.fill();
     }
 
-    if (getState().settings.showLabels || p.world.id === hoverId) {
+    if (getState().settings.showLabels || p.world.id === hoverId || mergeTarget) {
       ctx.font = "500 12px Outfit, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillStyle = p.world.id === hoverId ? "rgba(244,241,234,0.95)" : "rgba(244,241,234,0.62)";
+      ctx.fillStyle = p.world.id === hoverId || mergeTarget ? "rgba(244,241,234,0.95)" : "rgba(244,241,234,0.62)";
       ctx.fillText(`${p.world.icon}  ${p.world.name}`, 0, p.r + 18);
     }
     ctx.restore();
   }
 
-  function drawDragGhost(L) {
-    if (!drag) return;
-    ctx.save();
-    ctx.strokeStyle = "rgba(255,214,160,0.2)";
-    for (let i = 0; i < 6; i++) {
-      const R = radiusOf(i / 5, L);
-      ctx.beginPath();
-      ctx.ellipse(L.cx, L.cy, R, R * TILT, 0, 0, TAU);
-      ctx.stroke();
+  function dragGhost(L, placed) {
+    if (!drag?.moved) return null;
+    const merge = nearestMerge(mouse.x, mouse.y, drag.id);
+    if (merge) {
+      return { x: merge.x, y: merge.y, merge, lane: null };
     }
+    const dx = mouse.x - L.cx;
+    const dy = (mouse.y - L.cy) / TILT;
+    const dist = Math.hypot(dx, dy);
+    const lane = snapOrbit(clamp((dist - L.inner) / Math.max(1, L.outer - L.inner), 0, 1));
+    const R = radiusOf(lane, L);
+    const ang = Math.atan2((mouse.y - L.cy) / TILT, mouse.x - L.cx);
+    return {
+      x: L.cx + Math.cos(ang) * R,
+      y: L.cy + Math.sin(ang) * R * TILT,
+      merge: null,
+      lane,
+    };
+  }
+
+  function drawDragGhost(ghost, L) {
+    if (!ghost || !drag) return;
     const p = drag.placed;
-    ctx.globalAlpha = 0.7;
-    ctx.translate(mouse.x, mouse.y);
+    if (ghost.merge) {
+      ctx.save();
+      ctx.font = "500 12px Outfit, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(255,214,160,0.9)";
+      ctx.fillText("Join system", ghost.x, ghost.y - p.r - 18);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.78;
+    ctx.translate(ghost.x, ghost.y);
     drawPlanetBody(ctx, p.vis, p.r, p.vis.spin);
     ctx.restore();
   }
@@ -257,6 +380,7 @@ export function createEngine(canvas, visuals, hooks) {
     if (!running) return;
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
+    frameDt = dt;
     const { settings } = getState();
     const reduced = settings.reducedMotion;
     const pal = skyPalette();
@@ -283,32 +407,45 @@ export function createEngine(canvas, visuals, hooks) {
       if (shooting.life <= 0) shooting = null;
     }
 
-    searchPulse = lerp(searchPulse, document.getElementById("search-input") === document.activeElement ? 1 : 0.35, dt * 4);
+    searchPulse = lerp(
+      searchPulse,
+      document.getElementById("search-input") === document.activeElement ? 1 : 0.35,
+      dt * 4
+    );
 
-    const { L, placed, systemCenters } = placeWorlds();
+    placeCache = computePlacement(dt);
+    const { L, placed, systemCenters } = placeCache;
+    tickArrivals(placed, dt, reduced);
+    const ghost = dragGhost(L, placed);
     drawSky(ctx, L.w, L.h, pal, stars, now / 1000, parallax, shooting);
     drawSun(ctx, L.cx, L.cy, pal, searchPulse);
-    drawOrbits(L, placed.find((p) => p.world.id === hoverId)?.world);
+    drawOrbits(L, placed.find((p) => p.world.id === hoverId)?.world, ghost);
     drawSystemLinks(systemCenters, placed);
 
-    if (drag) {
+    const mergeId = ghost?.merge?.world.id;
+    if (drag?.moved) {
       for (const p of placed) {
         if (p.world.id === drag.id) continue;
-        drawWorld(p, L, dt, reduced);
+        drawWorld(p, L, dt, reduced, {
+          hovered: p.world.id === hoverId,
+          mergeTarget: p.world.id === mergeId,
+        });
       }
-      drawDragGhost(L);
+      drawDragGhost(ghost, L);
     } else {
-      for (const p of placed) drawWorld(p, L, dt, reduced);
+      for (const p of placed) {
+        drawWorld(p, L, dt, reduced, { hovered: p.world.id === hoverId });
+      }
     }
     drawParticles(dt);
 
-    const hovered = hitTest(mouse.x, mouse.y);
-    const nextId = drag ? drag.id : hovered?.world.id || null;
+    const hovered = drag?.moved ? null : hitTest(mouse.x, mouse.y);
+    const nextId = drag?.moved ? drag.id : hovered?.world.id || null;
     if (nextId !== hoverId) {
       hoverId = nextId;
-      canvas.classList.toggle("is-over-world", Boolean(hoverId) && !drag);
-      hooks.onHover(hoverId, hovered || null);
-    } else if (hovered) {
+      canvas.classList.toggle("is-over-world", Boolean(hovered) && !drag?.moved);
+      hooks.onHover(drag?.moved ? null : hoverId, hovered || null);
+    } else if (hovered && !drag?.moved) {
       hooks.onMoveCard?.(hovered);
     }
 
@@ -357,15 +494,15 @@ export function createEngine(canvas, visuals, hooks) {
       return;
     }
     const L = layout();
+    const merge = nearestMerge(e.clientX, e.clientY, current.id);
     const dx = e.clientX - L.cx;
     const dy = (e.clientY - L.cy) / TILT;
     const dist = Math.hypot(dx, dy);
-    const orbit = clamp((dist - L.inner) / (L.outer - L.inner), 0, 1);
-    const other = hitTest(e.clientX, e.clientY);
+    const orbit = snapOrbit(clamp((dist - L.inner) / Math.max(1, L.outer - L.inner), 0, 1));
     hooks.onDragEnd({
       id: current.id,
       orbit,
-      groupWithId: other && other.world.id !== current.id ? other.world.id : null,
+      groupWithId: merge?.world.id || null,
     });
   }
 

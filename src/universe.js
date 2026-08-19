@@ -1,6 +1,13 @@
-import { uid, normalizeUrl, nameFromUrl } from "./math.js";
+import { uid, normalizeUrl, nameFromUrl, clamp } from "./math.js";
 import { loadUniverse, saveUniverse } from "./storage.js";
-import { starterUniverse, EVOLUTION, DEFAULT_CONSTELLATIONS } from "./defaults.js";
+import { starterUniverse, EVOLUTION, DEFAULT_CONSTELLATIONS, starterConstellations } from "./defaults.js";
+
+export const ORBIT_LANES = 6;
+
+export function snapOrbit(orbit) {
+  const i = Math.round(clamp(orbit, 0, 1) * (ORBIT_LANES - 1));
+  return i / (ORBIT_LANES - 1);
+}
 
 let data = starterUniverse();
 let saveTimer = 0;
@@ -19,7 +26,12 @@ function scheduleSave() {
 }
 
 export function snapshot() {
-  return JSON.parse(JSON.stringify(data));
+  const copy = JSON.parse(JSON.stringify(data));
+  for (const w of copy.worlds) {
+    delete w.arriving;
+    delete w.arrivedBurst;
+  }
+  return copy;
 }
 
 export function subscribe(fn) {
@@ -33,7 +45,7 @@ export function getState() {
 
 export async function bootUniverse() {
   const saved = await loadUniverse();
-  if (saved?.version === 1 && Array.isArray(saved.worlds)) {
+  if (saved && (saved.version === 1 || saved.version === 2) && Array.isArray(saved.worlds)) {
     data = migrate(saved);
   } else {
     data = starterUniverse();
@@ -45,9 +57,44 @@ export async function bootUniverse() {
   return data;
 }
 
+function seedIds(worlds) {
+  return worlds
+    .map((w) => w.id)
+    .slice()
+    .sort()
+    .join(",");
+}
+
+function applyStarterGroups(worlds, constellations) {
+  const byId = Object.fromEntries(constellations.map((c) => [c.id, c]));
+  if (byId.coding) {
+    byId.coding.orbit = 0.58;
+    byId.coding.phase = 0.85;
+  }
+  if (byId.entertainment) {
+    byId.entertainment.orbit = 0.82;
+    byId.entertainment.phase = 2.15;
+  }
+  if (byId.school) {
+    byId.school.orbit = 0.94;
+    byId.school.phase = 4.1;
+  }
+  const assign = {
+    "seed:github": { constellationId: "coding", localPhase: 0.2, orbit: 0.58 },
+    "seed:hackclub": { constellationId: "coding", localPhase: 2.2, orbit: 0.58 },
+    "seed:chatgpt": { constellationId: "coding", localPhase: 4.3, orbit: 0.58 },
+    "seed:youtube": { constellationId: "entertainment", orbit: 0.78, phase: 2.15 },
+    "seed:wikipedia": { constellationId: "school", orbit: 0.92, phase: 4.1 },
+  };
+  for (const world of worlds) {
+    const patch = assign[world.id];
+    if (patch) Object.assign(world, patch);
+  }
+}
+
 function migrate(saved) {
-  return {
-    version: 1,
+  const next = {
+    version: 2,
     settings: {
       engine: "google",
       showOrbits: true,
@@ -57,7 +104,7 @@ function migrate(saved) {
     },
     constellations: saved.constellations?.length
       ? saved.constellations
-      : starterUniverse().constellations,
+      : starterConstellations(),
     worlds: saved.worlds.map((w) => ({
       hue: null,
       scale: 1,
@@ -69,6 +116,13 @@ function migrate(saved) {
       ...w,
     })),
   };
+  const original =
+    "seed:chatgpt,seed:github,seed:hackclub,seed:wikipedia,seed:youtube";
+  if (saved.version === 1 && seedIds(next.worlds) === original) {
+    if (!next.constellations.length) next.constellations = starterConstellations();
+    applyStarterGroups(next.worlds, next.constellations);
+  }
+  return next;
 }
 
 export function persistNow() {
@@ -76,7 +130,7 @@ export function persistNow() {
 }
 
 export function replaceUniverse(next) {
-  if (!next || next.version !== 1 || !Array.isArray(next.worlds)) {
+  if (!next || (next.version !== 1 && next.version !== 2) || !Array.isArray(next.worlds)) {
     throw new Error("This file is not a STARLING universe.");
   }
   data = migrate(next);
@@ -134,6 +188,8 @@ export function addWorld({ url, name, icon, constellationId, constellationName }
     seeded: false,
     createdAt: Date.now(),
     lastVisit: null,
+    arriving: 1,
+    arrivedBurst: false,
   };
   data.worlds.push(world);
   emit();
@@ -176,7 +232,12 @@ export function updateWorld(id, patch) {
     patch.constellationId = ensureConstellation(patch.constellationName);
     delete patch.constellationName;
   }
+  const leaving = "constellationId" in patch && !patch.constellationId && world.constellationId;
   Object.assign(world, patch);
+  if (leaving) {
+    world.constellationId = null;
+    world.orbit = nextFreeOrbit();
+  }
   emit();
   return world;
 }
@@ -189,7 +250,15 @@ export function removeWorld(id) {
 export function setOrbit(id, orbit) {
   const world = worldById(id);
   if (!world) return;
-  world.orbit = Math.max(0, Math.min(1, orbit));
+  world.orbit = snapOrbit(orbit);
+  emit();
+}
+
+export function leaveConstellation(id, orbit) {
+  const world = worldById(id);
+  if (!world) return;
+  world.constellationId = null;
+  world.orbit = snapOrbit(orbit);
   emit();
 }
 
@@ -244,7 +313,7 @@ export function matchCommand(query) {
 export function setConstellationOrbit(id, orbit) {
   const c = constellationById(id);
   if (!c) return;
-  c.orbit = Math.max(0, Math.min(1, orbit));
+  c.orbit = snapOrbit(orbit);
   emit();
 }
 

@@ -34,11 +34,12 @@ export const STARTER_WORLDS = [
     url: "https://github.com",
     icon: "🌎",
     visits: 14,
-    orbit: 0.18,
+    orbit: 0.58,
     phase: 0.35,
     hue: null,
     scale: 1,
-    constellationId: null,
+    constellationId: "coding",
+    localPhase: 0.2,
     seeded: true,
   },
   {
@@ -47,11 +48,12 @@ export const STARTER_WORLDS = [
     url: "https://youtube.com",
     icon: "🪐",
     visits: 23,
-    orbit: 0.42,
-    phase: 1.85,
+    orbit: 0.78,
+    phase: 2.15,
     hue: null,
     scale: 1,
-    constellationId: null,
+    constellationId: "entertainment",
+    localPhase: 0,
     seeded: true,
   },
   {
@@ -60,11 +62,12 @@ export const STARTER_WORLDS = [
     url: "https://wikipedia.org",
     icon: "🌑",
     visits: 8,
-    orbit: 0.7,
-    phase: 3.3,
+    orbit: 0.92,
+    phase: 4.1,
     hue: null,
     scale: 1,
-    constellationId: null,
+    constellationId: "school",
+    localPhase: 0,
     seeded: true,
   },
   {
@@ -73,11 +76,12 @@ export const STARTER_WORLDS = [
     url: "https://hackclub.com",
     icon: "☄️",
     visits: 11,
-    orbit: 0.3,
-    phase: 4.55,
+    orbit: 0.58,
+    phase: 0.35,
     hue: null,
     scale: 1,
-    constellationId: null,
+    constellationId: "coding",
+    localPhase: 2.2,
     seeded: true,
   },
   {
@@ -87,39 +91,51 @@ export const STARTER_WORLDS = [
     icon: "🔵",
     visits: 19,
     orbit: 0.58,
-    phase: 5.55,
+    phase: 0.35,
     hue: null,
     scale: 1,
-    constellationId: null,
+    constellationId: "coding",
+    localPhase: 4.3,
     seeded: true,
   },
 ];
 
 export const EVOLUTION = [
-  { at: 5, label: "atmosphere forming" },
-  { at: 15, label: "surface growing more complex" },
-  { at: 40, label: "a ring system is emerging" },
+  { at: 5, label: "Atmosphere forming" },
+  { at: 15, label: "Surface growing more complex" },
+  { at: 40, label: "A ring system is emerging" },
 ];
+
+export function stageOf(visits) {
+  let stage = { at: 0, label: "A quiet world" };
+  for (const step of EVOLUTION) {
+    if (visits >= step.at) stage = step;
+  }
+  return stage;
+}
+
+export function starterConstellations() {
+  return DEFAULT_CONSTELLATIONS.map((c) => ({
+    ...c,
+    orbit: c.id === "coding" ? 0.58 : c.id === "entertainment" ? 0.82 : 0.94,
+    phase: c.id === "coding" ? 0.85 : c.id === "school" ? 4.1 : 2.15,
+  }));
+}
 
 export function starterUniverse() {
   return {
-    version: 1,
+    version: 2,
     settings: {
       engine: "google",
       showOrbits: true,
       showLabels: true,
       reducedMotion: false,
     },
-    constellations: DEFAULT_CONSTELLATIONS.map((c) => ({
-      ...c,
-      orbit: 0.78,
-      phase: c.id === "coding" ? 0.4 : c.id === "school" ? 2.4 : 4.5,
-    })),
+    constellations: starterConstellations(),
     worlds: STARTER_WORLDS.map((w) => ({
       ...w,
       createdAt: Date.now(),
       lastVisit: null,
-      localPhase: Math.random() * Math.PI * 2,
     })),
   };
 }

@@ -235,6 +235,14 @@ body[data-sky="night"] {
   font-size: 0.8rem;
 }
 
+.card-stage {
+  margin: 6px 0 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
 .card-url {
   margin: 10px 0 0;
   overflow: hidden;

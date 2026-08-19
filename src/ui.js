@@ -10,7 +10,7 @@ import {
   launchWorld,
   ensureConstellation,
 } from "./universe.js";
-import { ENGINES } from "./defaults.js";
+import { ENGINES, stageOf } from "./defaults.js";
 import { prettyHost, nameFromUrl } from "./math.js";
 import { downloadJson } from "./storage.js";
 import { loadApod, renderApod } from "./apod.js";
@@ -114,7 +114,7 @@ export function bindUI(app) {
     let top = placed.y - 70;
     if (left + 270 > innerWidth) left = placed.x - placed.r - 280;
     if (top < 16) top = 16;
-    if (top + 180 > innerHeight) top = innerHeight - 190;
+    if (top + 200 > innerHeight) top = innerHeight - 210;
     card.style.left = `${Math.max(pad, left)}px`;
     card.style.top = `${top}px`;
   }
@@ -128,6 +128,7 @@ export function bindUI(app) {
     const w = placed.world;
     $("card-name").textContent = `${w.icon} ${w.name}`;
     $("card-meta").textContent = `Visited ${w.visits} time${w.visits === 1 ? "" : "s"}`;
+    $("card-stage").textContent = stageOf(w.visits).label;
     $("card-url").textContent = prettyHost(w.url);
     const vis = visuals.get(w.id);
     if (vis) drawMiniPlanet($("card-preview").getContext("2d"), vis, 72);

@@ -9,7 +9,8 @@ export function lerp(a, b, t) {
 }
 
 export function lerpAngle(a, b, t) {
-  let d = ((b - a + Math.PI) % TAU) - Math.PI;
+  let d = (b - a) % TAU;
+  if (d > Math.PI) d -= TAU;
   if (d < -Math.PI) d += TAU;
   return a + d * t;
 }
@@ -188,5 +189,5 @@ export function nameFromUrl(url) {
 }
 
 export function development(visits) {
-  return clamp(Math.log2(visits + 1) / Math.log2(80), 0, 1);
+  return clamp(Math.pow(Math.max(0, visits) / 25, 0.85), 0, 1);
 }

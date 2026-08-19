@@ -3,8 +3,8 @@ import {
   bootUniverse,
   getState,
   setOrbit,
-  setConstellationOrbit,
   joinWorlds,
+  leaveConstellation,
   persistNow,
   worldById,
   grouped,
@@ -57,7 +57,7 @@ async function boot() {
       } else {
         const w = worldById(id);
         if (w?.constellationId && grouped(w.constellationId)) {
-          setConstellationOrbit(w.constellationId, orbit);
+          leaveConstellation(id, orbit);
         } else {
           setOrbit(id, orbit);
         }

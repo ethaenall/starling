@@ -102,12 +102,14 @@ export function generateVisual(world) {
   const kind = BIOMES[seeds[2] % BIOMES.length];
   const hueOff = world.hue ?? 0;
   const dev = development(world.visits);
-  const hasClouds = kind === "terra" || kind === "ocean" || kind === "ice" || rnd() > 0.45;
-  const hasRings = rnd() > 0.78 || dev > 0.72;
-  const moons = Math.min(3, Math.floor(dev * 2.4) + (rnd() > 0.7 ? 1 : 0));
+  const cloudyBiome = kind === "terra" || kind === "ocean" || kind === "ice" || kind === "toxic";
+  const hasClouds = dev > 0.18 && (cloudyBiome || rnd() > 0.5);
+  const hasRings = dev > 0.72;
+  const moons = Math.min(3, Math.floor(dev * 3.2));
 
   const w = 512;
   const h = 256;
+  const barren = rgb(62, 58, 64);
   const surface = makeTexture(w, h, (data) => {
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
@@ -122,13 +124,15 @@ export function generateVisual(world) {
         const band = Math.sin(lat * (6 + rnd() * 5) + n * 3);
         let c = sampleBiome(kind, n, lat, band, rnd);
         if (hueOff) c = hueShift(c, hueOff);
-        if (dev > 0.35 && kind === "terra" && n > 0.58 && Math.abs(lat) < 0.6) {
-          const city = fbm3(px * 18, py * 18, pz * 18, seed + 9, 2);
-          if (city > 0.62) {
-            c = mixRgb(c, rgb(255, 220, 140), (dev - 0.35) * city * 0.8);
+        c = mixRgb(barren, c, 0.28 + dev * 0.72);
+        if (dev > 0.42 && Math.abs(lat) < 0.62) {
+          const city = fbm3(px * 16, py * 16, pz * 16, seed + 9, 2);
+          if (city > 0.66 - dev * 0.1) {
+            const light = kind === "lava" ? rgb(255, 160, 70) : rgb(255, 220, 140);
+            c = mixRgb(c, light, (dev - 0.42) * city * 0.95);
           }
         }
-        const polar = Math.pow(Math.abs(lat), 3) * 0.12;
+        const polar = Math.pow(Math.abs(lat), 3) * (0.18 - dev * 0.08);
         c = mixRgb(c, rgb(20, 20, 28), polar);
         put(data, x, y, w, c);
       }
@@ -147,8 +151,8 @@ export function generateVisual(world) {
             const py = lat;
             const pz = Math.sin(lon);
             const n = fbm3(px * 3.2, py * 3.6, pz * 3.2, seed + 77, 4);
-            const a = n > 0.55 ? Math.floor((n - 0.55) * 2.2 * 180 * (0.35 + dev)) : 0;
-            put(data, x, y, w, rgb(245, 248, 255), clamp(a, 0, 210));
+            const a = n > 0.55 ? Math.floor((n - 0.55) * 2.2 * 200 * (0.2 + dev)) : 0;
+            put(data, x, y, w, rgb(245, 248, 255), clamp(a, 0, 220));
           }
         }
       })
@@ -176,14 +180,17 @@ export function generateVisual(world) {
     ringOuter: 1.9 + rnd() * 0.25,
     ringTilt: 0.28 + rnd() * 0.16,
     ringRot: (rnd() - 0.5) * 0.6,
-    ringColor: `rgba(${tint.r}, ${tint.g}, ${tint.b}, 0.45)`,
+    ringColor: `rgba(${tint.r}, ${tint.g}, ${tint.b}, ${0.28 + dev * 0.4})`,
     moons: moonList,
-    glowColor: `rgba(${tint.r}, ${Math.min(255, tint.g + 20)}, ${tint.b}, ${0.18 + dev * 0.28})`,
-    atmColor: `rgba(${tint.r}, ${tint.g}, ${Math.min(255, tint.b + 40)}, ${0.18 + dev * 0.22})`,
+    glowColor: `rgba(${tint.r}, ${Math.min(255, tint.g + 20)}, ${tint.b}, ${0.08 + dev * 0.42})`,
+    atmColor: `rgba(${tint.r}, ${tint.g}, ${Math.min(255, tint.b + 40)}, ${0.05 + dev * 0.4})`,
+    atmRadius: 1.06 + dev * 0.28,
+    glowRadius: 1.7 + dev * 1.5,
     spin: rnd(),
     spinSpeed: 0.015 + rnd() * 0.03,
     baseRadius: 16 + development(world.visits) * 18,
     seed: seedStr,
+    dev,
   };
 }
 
@@ -223,13 +230,13 @@ export function drawPlanetBody(ctx, visual, r, spin) {
   ctx.fillRect(-r, -r, r * 2, r * 2);
   ctx.restore();
 
-  const atm = ctx.createRadialGradient(0, 0, r * 0.82, 0, 0, r * 1.22);
+  const atm = ctx.createRadialGradient(0, 0, r * 0.82, 0, 0, r * (visual.atmRadius || 1.22));
   atm.addColorStop(0, "transparent");
   atm.addColorStop(0.55, visual.atmColor);
   atm.addColorStop(1, "transparent");
   ctx.fillStyle = atm;
   ctx.beginPath();
-  ctx.arc(0, 0, r * 1.22, 0, Math.PI * 2);
+  ctx.arc(0, 0, r * (visual.atmRadius || 1.22), 0, Math.PI * 2);
   ctx.fill();
 
   if (visual.hasRings) drawRing(ctx, visual, r, "front");
