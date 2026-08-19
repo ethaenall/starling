@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "STARLING",
+  "short_name": "STARLING",
+  "description": "Your internet as a living solar system. Every site you care about becomes a planet.",
+  "version": "1.0.0",
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+  "icons": {
+    "any": "favicon.svg"
+  }
+}
