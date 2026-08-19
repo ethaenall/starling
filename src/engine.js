@@ -10,6 +10,7 @@ import {
 } from "./universe.js";
 import { drawPlanetBody } from "./planet-gen.js";
 import { createStarfield, drawSky, drawSun, skyPalette, skyPeriod } from "./sky.js";
+import { isMobileUi, isKeyboardOpen } from "./device.js";
 
 const TILT = 0.4;
 const MERGE_PAD = 36;
@@ -30,25 +31,40 @@ export function createEngine(canvas, visuals, hooks) {
   let frameDt = 0.016;
   let placeCache = null;
   let intro = 0;
+  let viewW = innerWidth;
+  let viewH = innerHeight;
+  let holdTimer = 0;
+  let holdFired = false;
+
+  function viewSize() {
+    if (!isKeyboardOpen()) {
+      viewW = innerWidth;
+      viewH = innerHeight;
+    }
+    return { w: viewW, h: viewH };
+  }
 
   function resize() {
+    const { w, h } = viewSize();
     const dpr = Math.min(devicePixelRatio || 1, 2);
-    canvas.width = innerWidth * dpr;
-    canvas.height = innerHeight * dpr;
-    canvas.style.width = `${innerWidth}px`;
-    canvas.style.height = `${innerHeight}px`;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
   function layout() {
-    const w = innerWidth;
-    const h = innerHeight;
+    const { w, h } = viewSize();
+    const compact = isMobileUi();
     const cx = w / 2;
-    const cy = h / 2 + h * 0.015;
-    const reach = Math.min(w * 0.42, h * 0.46);
-    const inner = Math.max(248, Math.min(w, h) * 0.235);
-    const outer = Math.max(inner + 90, reach);
-    return { w, h, cx, cy, inner, outer };
+    const cy = h / 2 + h * (compact ? 0.04 : 0.015);
+    const reach = compact ? Math.min(w * 0.4, h * 0.32) : Math.min(w * 0.42, h * 0.46);
+    const inner = compact
+      ? Math.max(108, Math.min(w, h) * 0.2)
+      : Math.max(248, Math.min(w, h) * 0.235);
+    const outer = Math.max(inner + (compact ? 56 : 90), reach);
+    return { w, h, cx, cy, inner, outer, compact };
   }
 
   function radiusOf(orbit, L) {
@@ -111,7 +127,7 @@ export function createEngine(canvas, visuals, hooks) {
         }
         const sys = systemCenters.get(c.id);
         const idx = members.findIndex((m) => m.id === world.id);
-        let localR = 52 + idx * 28;
+        let localR = (L.compact ? 34 : 52) + idx * (L.compact ? 20 : 28);
         const arriving = world.arriving ?? 0;
         if (arriving > 0) localR = lerp(92, localR, 1 - arriving * arriving);
         x = sys.x + Math.cos(vis.shownLocal) * localR;
@@ -136,7 +152,7 @@ export function createEngine(canvas, visuals, hooks) {
         (16 + development(world.visits) * 18) *
         (world.scale || 1) *
         sizeMul *
-        (0.85 + innerWidth / 2400);
+        (L.compact ? 0.68 + L.w / 2800 : 0.85 + L.w / 2400);
       placed.push({ world, vis, x, y, r, depth, inSystem, alpha: clamp((intro - 0.08) / 0.55, 0, 1) });
     }
     placed.sort((a, b) => a.depth - b.depth);
@@ -155,7 +171,8 @@ export function createEngine(canvas, visuals, hooks) {
       if (p.world.id === excludeId) continue;
       const dx = px - p.x;
       const dy = py - p.y;
-      if (dx * dx + dy * dy <= (p.r + 10) * (p.r + 10)) return p;
+      const pad = isMobileUi() ? 26 : 10;
+      if (dx * dx + dy * dy <= (p.r + pad) * (p.r + pad)) return p;
     }
     return null;
   }
@@ -478,6 +495,11 @@ export function createEngine(canvas, visuals, hooks) {
     requestAnimationFrame(frame);
   }
 
+  function clearHold() {
+    clearTimeout(holdTimer);
+    holdTimer = 0;
+  }
+
   function onMove(e) {
     mouse.x = e.clientX;
     mouse.y = e.clientY;
@@ -485,8 +507,10 @@ export function createEngine(canvas, visuals, hooks) {
     if (drag && !drag.moved) {
       const dx = mouse.x - drag.sx;
       const dy = mouse.y - drag.sy;
-      if (dx * dx + dy * dy > 64) {
+      const slop = isMobileUi() ? 22 : 8;
+      if (dx * dx + dy * dy > slop * slop) {
         drag.moved = true;
+        clearHold();
         canvas.classList.add("is-dragging");
         hooks.onHover(null, null);
       }
@@ -495,22 +519,49 @@ export function createEngine(canvas, visuals, hooks) {
 
   function onDown(e) {
     if (e.target !== canvas || e.button !== 0) return;
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
     mouse.down = true;
+    holdFired = false;
+    if (document.activeElement?.id === "search-input") {
+      document.activeElement.blur();
+    }
+    clearHold();
     const hit = hitTest(e.clientX, e.clientY);
-    if (hit) {
-      drag = {
-        id: hit.world.id,
-        sx: e.clientX,
-        sy: e.clientY,
-        moved: false,
-        placed: hit,
-      };
+    if (!hit) {
+      hooks.onBackground?.();
+      return;
+    }
+    drag = {
+      id: hit.world.id,
+      sx: e.clientX,
+      sy: e.clientY,
+      moved: false,
+      placed: hit,
+    };
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      /* capture is optional */
+    }
+    if (isMobileUi()) {
+      holdTimer = setTimeout(() => {
+        holdFired = true;
+        drag = null;
+        canvas.classList.remove("is-dragging");
+        hooks.onEdit?.(hit.world.id);
+      }, 520);
     }
   }
 
   function onUp(e) {
     mouse.down = false;
     canvas.classList.remove("is-dragging");
+    clearHold();
+    if (holdFired) {
+      holdFired = false;
+      return;
+    }
     if (!drag) return;
     const current = drag;
     drag = null;
@@ -540,9 +591,11 @@ export function createEngine(canvas, visuals, hooks) {
   }
 
   window.addEventListener("resize", resize);
+  window.visualViewport?.addEventListener("resize", resize);
   window.addEventListener("pointermove", onMove);
   canvas.addEventListener("pointerdown", onDown);
   window.addEventListener("pointerup", onUp);
+  canvas.addEventListener("pointercancel", onUp);
   canvas.addEventListener("contextmenu", onMenu);
   resize();
   requestAnimationFrame(frame);

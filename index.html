@@ -2,7 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#02030c" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>STARLING — Your Internet as a Living Solar System</title>
     <meta
       name="description"
@@ -25,6 +29,10 @@
         id="search-input"
         type="text"
         placeholder="Search the universe..."
+        inputmode="search"
+        enterkeyhint="search"
+        autocapitalize="none"
+        autocorrect="off"
         aria-label="Search the universe"
       />
       <ul id="search-suggest" class="suggest" hidden></ul>
@@ -46,7 +54,10 @@
       </div>
     </aside>
 
-    <p id="hint" class="hint">Hover a world · Click to open · Press <kbd>+</kbd> to add</p>
+    <p id="hint" class="hint">
+      <span class="hint-fine">Hover a world · Click to open · Press <kbd>+</kbd> to add</span>
+      <span class="hint-coarse">Tap a world · Hold to customize · Drag to reorbit</span>
+    </p>
 
     <p id="empty" class="empty" hidden>
       A quiet universe.<br />
@@ -206,6 +217,8 @@
       <div class="panel glass" role="dialog" aria-labelledby="keys-title">
         <h2 id="keys-title">Command the sky</h2>
         <ul class="keys">
+          <li class="keys-touch">Tap a world to inspect it; tap again or Open to visit</li>
+          <li class="keys-touch">Hold a world to customize it</li>
           <li><kbd>/</kbd> or <kbd>S</kbd> Focus search</li>
           <li><kbd>/github</kbd> Launch a saved world by name</li>
           <li><kbd>+</kbd> or <kbd>A</kbd> Birth a world</li>

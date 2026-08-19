@@ -12,6 +12,7 @@ import {
 import { generateVisual } from "./planet-gen.js";
 import { createEngine } from "./engine.js";
 import { bindUI } from "./ui.js";
+import { isMobileUi } from "./device.js";
 
 const visuals = new Map();
 
@@ -36,6 +37,10 @@ async function boot() {
 
   app.engine = createEngine(canvas, visuals, {
     onHover(id, placed) {
+      if (isMobileUi()) {
+        if (id) ui.showCard(placed);
+        return;
+      }
       if (!id) ui.hideCard();
       else ui.showCard(placed);
     },
@@ -43,7 +48,11 @@ async function boot() {
       ui.showCard(placed);
     },
     onActivate(id) {
-      ui.launch(id);
+      if (isMobileUi()) ui.selectWorld(id);
+      else ui.launch(id);
+    },
+    onBackground() {
+      ui.clearSelection();
     },
     onEdit(id) {
       ui.openEditor(id);

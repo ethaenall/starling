@@ -16,6 +16,7 @@ import { downloadJson } from "./storage.js";
 import { go, isExtension } from "./platform.js";
 import { loadApod, renderApod } from "./apod.js";
 import { drawMiniPlanet } from "./planet-gen.js";
+import { isMobileUi } from "./device.js";
 
 export function bindUI(app) {
   const { visuals, rebuild } = app;
@@ -26,6 +27,7 @@ export function bindUI(app) {
   const card = $("world-card");
   const hint = $("hint");
   let hoverId = null;
+  let pinnedId = null;
   let suggestIndex = 0;
   let suggestItems = [];
   let editingId = null;
@@ -39,9 +41,10 @@ export function bindUI(app) {
   }
 
   function openModal(id) {
+    card.hidden = true;
     $(id).hidden = false;
     const focusable = $(id).querySelector("input, select, button");
-    focusable?.focus();
+    if (!isMobileUi()) focusable?.focus();
   }
 
   function closeModal(id) {
@@ -110,6 +113,13 @@ export function bindUI(app) {
       return;
     }
     card.hidden = false;
+    if (isMobileUi()) {
+      card.classList.add("is-sheet");
+      card.style.left = "";
+      card.style.top = "";
+      return;
+    }
+    card.classList.remove("is-sheet");
     const pad = 18;
     let left = placed.x + placed.r + 20;
     let top = placed.y - 70;
@@ -123,7 +133,7 @@ export function bindUI(app) {
   function showCard(placed) {
     hoverId = placed?.world.id || null;
     if (!placed || anyModal()) {
-      card.hidden = true;
+      if (!pinnedId) card.hidden = true;
       return;
     }
     const w = placed.world;
@@ -139,6 +149,7 @@ export function bindUI(app) {
   function launch(id) {
     const { world, evolved } = launchWorld(id);
     if (!world) return;
+    pinnedId = null;
     card.hidden = true;
     if (evolved) {
       rebuild(world);
@@ -146,6 +157,36 @@ export function bindUI(app) {
       toast(`${world.name} is evolving — ${evolved.label}`);
     }
     go(world.url);
+  }
+
+  function selectWorld(id) {
+    if (pinnedId === id) {
+      launch(id);
+      return;
+    }
+    pinnedId = id;
+    const placed = engine()?.screenOf(id);
+    if (placed) showCard(placed);
+  }
+
+  function clearSelection() {
+    pinnedId = null;
+    hoverId = null;
+    card.hidden = true;
+    card.classList.remove("is-sheet");
+  }
+
+  function bindViewport() {
+    const vv = window.visualViewport;
+    const sync = () => {
+      const occluded = vv ? innerHeight - vv.height - vv.offsetTop : 0;
+      document.body.classList.toggle("is-keyboard", occluded > 80);
+      document.documentElement.style.setProperty("--vv-bottom", `${Math.max(0, occluded)}px`);
+    };
+    vv?.addEventListener("resize", sync);
+    vv?.addEventListener("scroll", sync);
+    window.addEventListener("resize", sync);
+    sync();
   }
 
   function renderSuggest(items) {
@@ -420,6 +461,7 @@ export function bindUI(app) {
 
   fillEngines();
   syncEmpty();
+  bindViewport();
   if (isExtension()) {
     const note = $("ext-lede");
     if (note) note.hidden = false;
@@ -429,10 +471,13 @@ export function bindUI(app) {
   return {
     toast,
     showCard,
-    hideCard() {
+    hideCard(force = false) {
+      if (pinnedId && !force) return;
       card.hidden = true;
       hoverId = null;
     },
+    selectWorld,
+    clearSelection,
     launch,
     openEditor,
     ensureConstellation,

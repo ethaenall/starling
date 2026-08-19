@@ -8,7 +8,7 @@ Nothing leaves the browser. No account.
 
 https://ethaenall.github.io/starling/
 
-Open that URL from any machine. Your planets stay in that browser (localStorage). This is the website build, not the Chrome new-tab override.
+Open that URL from any machine, including a phone. Tap a world to inspect it, tap again to visit, hold to customize. Your planets stay in that browser (localStorage). This is the website build, not the Chrome new-tab override.
 
 ## Install (unpacked)
 
