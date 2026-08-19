@@ -4,6 +4,12 @@ Every site you care about is a planet. This fork is a **Chrome / Edge New Tab** 
 
 Nothing leaves the browser. No account.
 
+## Live demo
+
+https://ethaenall.github.io/starling/
+
+Open that URL from any machine. Your planets stay in that browser (localStorage). This is the website build, not the Chrome new-tab override.
+
 ## Install (unpacked)
 
 1. `npm install`
