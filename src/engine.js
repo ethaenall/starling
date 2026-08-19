@@ -29,6 +29,7 @@ export function createEngine(canvas, visuals, hooks) {
   let searchPulse = 0;
   let frameDt = 0.016;
   let placeCache = null;
+  let intro = 0;
 
   function resize() {
     const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -56,23 +57,26 @@ export function createEngine(canvas, visuals, hooks) {
 
   function computePlacement(dt) {
     const L = layout();
-    const { worlds } = getState();
+    const { worlds, settings } = getState();
     const placed = [];
     const systemCenters = new Map();
-    const lerpK = dt > 0 ? 1 - Math.exp(-dt * 7) : 1;
-    const angK = dt > 0 ? 1 - Math.exp(-dt * 8) : 1;
+    const reduced = settings.reducedMotion;
+    const live = dt > 0 && !reduced;
+    const lerpK = live ? 1 - Math.exp(-dt * 7) : 1;
+    const angK = live ? 1 - Math.exp(-dt * 8) : 1;
+    const enter = 1 - Math.pow(1 - intro, 3);
 
     for (const world of worlds) {
       const vis = visuals.get(world.id);
       if (!vis) continue;
-      if (dt > 0) {
+      if (live) {
         vis.shownOrbit = lerp(vis.shownOrbit ?? world.orbit, world.orbit, lerpK);
         vis.shownPhase = lerpAngle(vis.shownPhase ?? world.phase, world.phase, angK);
         vis.shownLocal = lerpAngle(vis.shownLocal ?? world.localPhase, world.localPhase, angK);
       } else {
-        vis.shownOrbit ??= world.orbit;
-        vis.shownPhase ??= world.phase;
-        vis.shownLocal ??= world.localPhase;
+        vis.shownOrbit = world.orbit;
+        vis.shownPhase = world.phase;
+        vis.shownLocal = world.localPhase;
       }
 
       let x;
@@ -89,11 +93,14 @@ export function createEngine(canvas, visuals, hooks) {
             shown = { orbit: c.orbit, phase: c.phase };
             shownSys.set(c.id, shown);
           }
-          if (dt > 0) {
+          if (live) {
             shown.orbit = lerp(shown.orbit, c.orbit, lerpK);
             shown.phase = lerpAngle(shown.phase, c.phase, angK);
+          } else {
+            shown.orbit = c.orbit;
+            shown.phase = c.phase;
           }
-          const R = radiusOf(shown.orbit, L);
+          const R = radiusOf(shown.orbit, L) * (1.22 - 0.22 * enter);
           systemCenters.set(c.id, {
             constellation: c,
             x: L.cx + Math.cos(shown.phase) * R,
@@ -111,7 +118,7 @@ export function createEngine(canvas, visuals, hooks) {
         y = sys.y + Math.sin(vis.shownLocal) * localR * TILT;
         depth = sys.depth + Math.sin(vis.shownLocal) * 0.15;
       } else {
-        let R = radiusOf(vis.shownOrbit, L);
+        let R = radiusOf(vis.shownOrbit, L) * (1.22 - 0.22 * enter);
         let phase = vis.shownPhase;
         const arriving = world.arriving ?? 0;
         if (arriving > 0) {
@@ -130,7 +137,7 @@ export function createEngine(canvas, visuals, hooks) {
         (world.scale || 1) *
         sizeMul *
         (0.85 + innerWidth / 2400);
-      placed.push({ world, vis, x, y, r, depth, inSystem });
+      placed.push({ world, vis, x, y, r, depth, inSystem, alpha: clamp((intro - 0.08) / 0.55, 0, 1) });
     }
     placed.sort((a, b) => a.depth - b.depth);
     return { L, placed, systemCenters };
@@ -242,6 +249,8 @@ export function createEngine(canvas, visuals, hooks) {
   }
 
   function drawSystemLinks(systemCenters, placed) {
+    ctx.save();
+    ctx.globalAlpha = intro;
     for (const sys of systemCenters.values()) {
       const members = placed.filter((p) => p.world.constellationId === sys.constellation.id);
       if (members.length < 2) continue;
@@ -259,6 +268,7 @@ export function createEngine(canvas, visuals, hooks) {
       ctx.textAlign = "center";
       ctx.fillText(sys.constellation.name.toUpperCase(), sys.x, sys.y - 36);
     }
+    ctx.restore();
   }
 
   function drawWorld(p, L, dt, reduced, { hovered = false, mergeTarget = false } = {}) {
@@ -266,8 +276,9 @@ export function createEngine(canvas, visuals, hooks) {
     if (!reduced) vis.spin += vis.spinSpeed * dt;
 
     ctx.save();
+    ctx.globalAlpha = p.alpha ?? 1;
     ctx.translate(p.x, p.y);
-    const glowR = p.r * (vis.glowRadius || 2.4) * (hovered ? 1.18 : 1);
+    const glowR = p.r * (vis.glowRadius || 2.4) * (hovered ? 1.32 : 1);
     const glow = ctx.createRadialGradient(0, 0, p.r * 0.2, 0, 0, glowR);
     glow.addColorStop(0, vis.glowColor);
     glow.addColorStop(1, "transparent");
@@ -286,6 +297,16 @@ export function createEngine(canvas, visuals, hooks) {
 
     const lightAng = Math.atan2(L.cy - p.y, L.cx - p.x);
     drawPlanetBody(ctx, vis, p.r, vis.spin);
+    if (hovered) {
+      const halo = ctx.createRadialGradient(0, 0, p.r * 0.9, 0, 0, p.r * 1.45);
+      halo.addColorStop(0, "transparent");
+      halo.addColorStop(0.55, vis.atmColor);
+      halo.addColorStop(1, "transparent");
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(0, 0, p.r * 1.45, 0, TAU);
+      ctx.fill();
+    }
     ctx.save();
     ctx.beginPath();
     ctx.arc(0, 0, p.r, 0, TAU);
@@ -383,10 +404,15 @@ export function createEngine(canvas, visuals, hooks) {
     frameDt = dt;
     const { settings } = getState();
     const reduced = settings.reducedMotion;
-    const pal = skyPalette();
-    document.body.dataset.sky = skyPeriod();
+    document.body.classList.toggle("is-reduced", reduced);
+    if (reduced) intro = 1;
+    else intro = Math.min(1, intro + dt / 1.55);
+    const skyOverride = new URLSearchParams(location.search).get("sky");
+    const pal = skyPalette(new Date(), skyOverride);
+    document.body.dataset.sky = skyOverride || skyPeriod();
 
     if (!reduced) advancePhases(dt, false, hoverId);
+    else if (shooting) shooting = null;
 
     parallax.x = lerp(parallax.x, reduced ? 0 : (mouse.x / innerWidth - 0.5) * 2, 0.06);
     parallax.y = lerp(parallax.y, reduced ? 0 : (mouse.y / innerHeight - 0.5) * 2, 0.06);
@@ -418,7 +444,7 @@ export function createEngine(canvas, visuals, hooks) {
     tickArrivals(placed, dt, reduced);
     const ghost = dragGhost(L, placed);
     drawSky(ctx, L.w, L.h, pal, stars, now / 1000, parallax, shooting);
-    drawSun(ctx, L.cx, L.cy, pal, searchPulse);
+    drawSun(ctx, L.cx, L.cy, pal, searchPulse * intro);
     drawOrbits(L, placed.find((p) => p.world.id === hoverId)?.world, ghost);
     drawSystemLinks(systemCenters, placed);
 
@@ -439,7 +465,7 @@ export function createEngine(canvas, visuals, hooks) {
     }
     drawParticles(dt);
 
-    const hovered = drag?.moved ? null : hitTest(mouse.x, mouse.y);
+    const hovered = drag?.moved || intro < 0.7 ? null : hitTest(mouse.x, mouse.y);
     const nextId = drag?.moved ? drag.id : hovered?.world.id || null;
     if (nextId !== hoverId) {
       hoverId = nextId;

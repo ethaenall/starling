@@ -107,8 +107,8 @@ export function generateVisual(world) {
   const hasRings = dev > 0.72;
   const moons = Math.min(3, Math.floor(dev * 3.2));
 
-  const w = 512;
-  const h = 256;
+  const w = 256;
+  const h = 128;
   const barren = rgb(62, 58, 64);
   const surface = makeTexture(w, h, (data) => {
     for (let y = 0; y < h; y++) {
@@ -120,7 +120,7 @@ export function generateVisual(world) {
         const px = Math.cos(lon) * Math.cos(lat * 0.5 * Math.PI);
         const py = Math.sin(lat * 0.5 * Math.PI);
         const pz = Math.sin(lon) * Math.cos(lat * 0.5 * Math.PI);
-        const n = fbm3(px * 2.4, py * 2.4, pz * 2.4, seed, 5);
+        const n = fbm3(px * 2.4, py * 2.4, pz * 2.4, seed, 4);
         const band = Math.sin(lat * (6 + rnd() * 5) + n * 3);
         let c = sampleBiome(kind, n, lat, band, rnd);
         if (hueOff) c = hueShift(c, hueOff);
@@ -150,7 +150,7 @@ export function generateVisual(world) {
             const px = Math.cos(lon);
             const py = lat;
             const pz = Math.sin(lon);
-            const n = fbm3(px * 3.2, py * 3.6, pz * 3.2, seed + 77, 4);
+            const n = fbm3(px * 3.2, py * 3.6, pz * 3.2, seed + 77, 3);
             const a = n > 0.55 ? Math.floor((n - 0.55) * 2.2 * 200 * (0.2 + dev)) : 0;
             put(data, x, y, w, rgb(245, 248, 255), clamp(a, 0, 220));
           }

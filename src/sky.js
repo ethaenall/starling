@@ -2,30 +2,30 @@ import { mulberry32, mixRgb } from "./math.js";
 
 const PALETTES = {
   dawn: {
-    bg: { r: 18, g: 8, b: 20 },
-    nebulaA: { r: 90, g: 30, b: 70 },
-    nebulaB: { r: 180, g: 80, b: 50 },
-    sun: { r: 255, g: 190, b: 140 },
+    bg: { r: 28, g: 8, b: 22 },
+    nebulaA: { r: 140, g: 40, b: 90 },
+    nebulaB: { r: 220, g: 110, b: 55 },
+    sun: { r: 255, g: 176, b: 120 },
     name: "dawn",
   },
   day: {
-    bg: { r: 8, g: 14, b: 28 },
-    nebulaA: { r: 30, g: 50, b: 90 },
-    nebulaB: { r: 20, g: 30, b: 50 },
-    sun: { r: 255, g: 230, b: 190 },
+    bg: { r: 10, g: 18, b: 38 },
+    nebulaA: { r: 40, g: 80, b: 150 },
+    nebulaB: { r: 30, g: 50, b: 90 },
+    sun: { r: 255, g: 232, b: 196 },
     name: "day",
   },
   dusk: {
-    bg: { r: 22, g: 8, b: 16 },
-    nebulaA: { r: 110, g: 30, b: 60 },
-    nebulaB: { r: 200, g: 90, b: 50 },
-    sun: { r: 255, g: 160, b: 110 },
+    bg: { r: 32, g: 6, b: 14 },
+    nebulaA: { r: 170, g: 35, b: 70 },
+    nebulaB: { r: 255, g: 110, b: 40 },
+    sun: { r: 255, g: 140, b: 85 },
     name: "dusk",
   },
   night: {
-    bg: { r: 4, g: 5, b: 14 },
-    nebulaA: { r: 20, g: 24, b: 60 },
-    nebulaB: { r: 40, g: 10, b: 50 },
+    bg: { r: 2, g: 3, b: 12 },
+    nebulaA: { r: 28, g: 42, b: 120 },
+    nebulaB: { r: 72, g: 18, b: 100 },
     sun: { r: 255, g: 214, b: 160 },
     name: "night",
   },
@@ -49,7 +49,8 @@ function blendPalettes(a, b, t) {
   };
 }
 
-export function skyPalette(date = new Date()) {
+export function skyPalette(date = new Date(), name = null) {
+  if (name && PALETTES[name]) return PALETTES[name];
   const h = date.getHours() + date.getMinutes() / 60;
   if (h >= 5 && h < 7.5) return blendPalettes(PALETTES.night, PALETTES.dawn, (h - 5) / 2.5);
   if (h >= 7.5 && h < 9) return blendPalettes(PALETTES.dawn, PALETTES.day, (h - 7.5) / 1.5);
@@ -94,7 +95,7 @@ export function drawSky(ctx, w, h, palette, stars, t, parallax, shooting) {
     h * 0.28,
     Math.max(w, h) * 0.55
   );
-  g1.addColorStop(0, cssRgb(palette.nebulaA, 0.35));
+  g1.addColorStop(0, cssRgb(palette.nebulaA, 0.55));
   g1.addColorStop(1, "transparent");
   ctx.fillStyle = g1;
   ctx.fillRect(0, 0, w, h);
@@ -107,9 +108,22 @@ export function drawSky(ctx, w, h, palette, stars, t, parallax, shooting) {
     h * 0.7,
     Math.max(w, h) * 0.5
   );
-  g2.addColorStop(0, cssRgb(palette.nebulaB, 0.28));
+  g2.addColorStop(0, cssRgb(palette.nebulaB, 0.48));
   g2.addColorStop(1, "transparent");
   ctx.fillStyle = g2;
+  ctx.fillRect(0, 0, w, h);
+
+  const g3 = ctx.createRadialGradient(
+    w * 0.5 + nx * 0.15,
+    h * 0.12 + ny * 0.2,
+    0,
+    w * 0.5,
+    h * 0.08,
+    Math.max(w, h) * 0.42
+  );
+  g3.addColorStop(0, cssRgb(palette.nebulaA, 0.22));
+  g3.addColorStop(1, "transparent");
+  ctx.fillStyle = g3;
   ctx.fillRect(0, 0, w, h);
 
   for (const star of stars) {
@@ -134,9 +148,9 @@ export function drawSky(ctx, w, h, palette, stars, t, parallax, shooting) {
 export function drawSun(ctx, cx, cy, palette, pulse) {
   const r = 90 + pulse * 10;
   const glow = ctx.createRadialGradient(cx, cy, 8, cx, cy, r * 4.2);
-  glow.addColorStop(0, cssRgb(palette.sun, 0.22 + pulse * 0.08));
-  glow.addColorStop(0.18, cssRgb(palette.sun, 0.1));
-  glow.addColorStop(0.45, cssRgb(palette.sun, 0.03));
+  glow.addColorStop(0, cssRgb(palette.sun, 0.34 + pulse * 0.14));
+  glow.addColorStop(0.18, cssRgb(palette.sun, 0.16));
+  glow.addColorStop(0.45, cssRgb(palette.sun, 0.05));
   glow.addColorStop(1, "transparent");
   ctx.fillStyle = glow;
   ctx.beginPath();
